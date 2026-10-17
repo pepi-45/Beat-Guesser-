@@ -94,8 +94,19 @@ io.on('connection',socket=>{
     if(Date.now()-p.lastGuess<700)return cb?.({error:'Изчакай малко преди следващия опит.'});
     p.lastGuess=Date.now();
     const right=norm(title)===norm(s.title) && (!norm(s.artist)||norm(artist)===norm(s.artist));
-    if(right){p.answered=true;p.score+=stages[r.stage].points;io.to(r.code).emit('correct',{name:p.name,points:stages[r.stage].points});broadcast(r);}
-    cb?.({ok:true,correct:right,points:right?stages[r.stage].points:0});
+    let awarded = 0;
+    if(right){
+      // Each subsequent correct guess earns 10% less of the current stage's
+      // base points, down to a minimum of 10% of those points.
+      const correctBefore = [...r.players.values()].filter(player => player.answered).length;
+      const basePoints = stages[r.stage].points;
+      awarded = Math.max(Math.round(basePoints * 0.1), basePoints - correctBefore * Math.round(basePoints * 0.1));
+      p.answered = true;
+      p.score += awarded;
+      io.to(r.code).emit('correct',{name:p.name,points:awarded});
+      broadcast(r);
+    }
+    cb?.({ok:true,correct:right,points:awarded});
   });
   socket.on('disconnect',()=>{const r=rooms.get(socket.data?.code);if(r&&socket.data?.host&&r.hostSocket===socket.id){r.hostSocket=null;broadcast(r);}});
 });
